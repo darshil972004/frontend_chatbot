@@ -235,8 +235,7 @@ export function Chatbot({ visible, onClose }: Props) {
       .then((resp) => {
         log('sendChat response', { hasResult: !!resp?.result, props: Array.isArray(resp?.properties) ? resp.properties.length : 0 })
         // Render message depending on reply type
-        const replyType = typeof resp?.type === 'string' ? resp.type.toLowerCase() : ''
-        const responseUi = typeof resp?.response_type === 'string' ? resp.response_type.toLowerCase() : ''
+  const replyType = typeof resp?.type === 'string' ? resp.type.toLowerCase() : ''
 
         // Normalize option arrays from various possible backend fields
         const normalizeOptions = (arr: any[]): QuickButton[] => {
@@ -249,32 +248,39 @@ export function Chatbot({ visible, onClose }: Props) {
             value: String(o?.value ?? o?.id ?? o?.label ?? o?.text ?? o?.name ?? '')
           }))
         }
+        const responseUi = typeof resp?.response_type === 'string' ? resp.response_type.toLowerCase() : ''
+        const isDropdown = ['dropdown', 'select', 'list', 'menu'].includes(responseUi)
+        const isButtons = ['buttons', 'button', 'quick_replies', 'options', 'chips'].includes(responseUi)
 
+        // Normalize raw sources depending on explicit fields and response type
         const rawButtons = Array.isArray((resp as any)?.buttons)
           ? (resp as any).buttons
-          : (Array.isArray((resp as any)?.options) ? (resp as any).options : (Array.isArray((resp as any)?.choices) ? (resp as any).choices : null))
+          : (!isDropdown && Array.isArray((resp as any)?.options)
+              ? (resp as any).options
+              : (Array.isArray((resp as any)?.choices) ? (resp as any).choices : null))
+
         const rawDropdown = Array.isArray((resp as any)?.dropdown)
           ? (resp as any).dropdown
-          : (Array.isArray((resp as any)?.select_options) ? (resp as any).select_options : null)
+          : (Array.isArray((resp as any)?.select_options)
+              ? (resp as any).select_options
+              : (isDropdown && Array.isArray((resp as any)?.options) ? (resp as any).options : null))
 
         const buttons = rawButtons ? normalizeOptions(rawButtons) : null
         const dropdown = rawDropdown ? normalizeOptions(rawDropdown) : null
-
-        const isDropdown = ['dropdown', 'select', 'list', 'menu'].includes(responseUi)
-        const isButtons = ['buttons', 'button', 'quick_replies', 'options', 'chips'].includes(responseUi)
         if (replyType === 'onboarding') {
-          // For 'onboarding', prefer HTML content and avoid duplicating plain text
+          // For 'onboarding', prefer HTML content but show lead text before controls
+          if (typeof resp?.result === 'string' && resp.result.trim().length > 0) {
+            // Show lead message text first
+            appendBot(resp.result.trim(), resp?.html || null, null, null)
+          } else if (resp?.html && resp.html.trim().length > 0) {
+            appendBot('', resp.html, null, null)
+          }
+
+          // Then render controls (dropdown or buttons) if provided
           if (isDropdown && dropdown && dropdown.length > 0) {
-            // For onboarding dropdown, show only the control (no lead text)
             appendBot('', null, null, dropdown)
           } else if (isButtons && buttons && buttons.length > 0) {
-            // For onboarding buttons, show only the controls (no lead text)
             appendBot('', null, buttons, null)
-          } else if (resp?.html && resp.html.trim().length > 0) {
-            appendBot('', resp.html, buttons, null)
-          } else if (typeof resp?.result === 'string' && resp.result.trim().length > 0) {
-            // Fallback to normal text if no HTML provided
-            appendBot(resp.result.trim(), null, buttons, null)
           }
         } else {
           // Default behavior for other categories
